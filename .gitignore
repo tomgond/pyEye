@@ -99,3 +99,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# My ignores:
+
+.idea/
+train_eye/images/
+
