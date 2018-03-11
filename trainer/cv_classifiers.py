@@ -51,16 +51,16 @@ def test_specific_haar_classifiers():
     for img_path in os.listdir("../train_eye/images"):
         total_images += 1
         if total_images % 50 == 0:
-            print recognized_in
-            print total_images
-            print "Total recognized : {0}".format(float(recognized_in) / total_images)
+            print(recognized_in)
+            print(total_images)
+            print("Total recognized : {0}".format(float(recognized_in) / total_images))
         img_path = os.path.join("../train_eye/images",img_path)
         img = cv2.imread(img_path)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         if has_upper_body(img):
             recognized_in +=1
-    print "Total recognized : {0}".format(float(recognized_in)/total_images)
-    print "Finished"
+    print("Total recognized : {0}".format(float(recognized_in)/total_images))
+    print("Finished")
 
 
 def find_center(coor_list):
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     for i,img_path in enumerate(os.listdir("../train_eye/images")):
         img_path = os.path.join("../train_eye/images",img_path)
         img = cv2.imread(img_path)
-        print i
+        print(i)
         crop_face(img, 300)
 
 

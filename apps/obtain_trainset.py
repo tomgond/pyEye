@@ -13,7 +13,7 @@ def on_click_event(cam):
     posX, posY = queryMousePosition()
     with open(TRAIN_INDEX_PATH, 'a') as f:
         f.write("{0} {1} {2}\n".format(img_path, posX, posY))
-	print("Got pic")
+	print("Got pic -- {0} X: {1} Y: {2}".format(img_path, posX, posY))
 
 
 

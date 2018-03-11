@@ -1,0 +1,5 @@
+
+
+TRAIN:
+
+gcloud ml-engine jobs submit training "test_job" --job-dir gs://eye-detection-storage/jobs --runtime-version 1.4 --module-name trainer.cnn --package-path ./trainer --config trainer/cloudml-gpu.yaml

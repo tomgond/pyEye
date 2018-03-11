@@ -1,21 +1,15 @@
 import sys
 from keras.preprocessing.image import ImageDataGenerator, img_to_array
-import cv_classifiers
+import trainer.cv_classifiers as cv_classifiers
 import random
+import json
+from gcloud import storage
 import keras
-import Image
-import matplotlib.pyplot as plt
 import os
 sys.path.insert(0, os.path.abspath('..'))
 import numpy as np
 from keras.layers.normalization import BatchNormalization
-import os
-
-os.environ['LD_LIBRARY_PATH'] = '/usr/local/cuda-8.0/lib64'
-from skimage import color, exposure, transform
-from skimage import io
-import os
-import glob
+from skimage import transform
 from utils import constants
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation, Flatten
@@ -24,12 +18,12 @@ from keras.layers.pooling import MaxPooling2D
 from keras import backend as K
 from keras.optimizers import SGD
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint
-import keras.callbacks as cbks
-from keras.utils import plot_model
 import cv2
 import time
 import os
 from keras import backend as K
+
+
 K.set_image_data_format('channels_first')
 
 IMG_SIZE = 300
@@ -58,32 +52,13 @@ def crop_many_sizes(img):
     crop_image = img[x:x+300, y:y+300]
     return crop_image
 
-def preprocess_img(img):
-    # Histogram normalization in v channel
-    hsv = color.rgb2hsv(img)
-    hsv[:, :, 2] = exposure.equalize_hist(hsv[:, :, 2])
-    img = color.hsv2rgb(hsv)
 
-    # central square crop
-    min_side = min(img.shape[:-1])
-    centre = img.shape[0] // 2, img.shape[1] // 2
-    img = img[centre[0] - min_side // 2:centre[0] + min_side // 2,
-              centre[1] - min_side // 2:centre[1] + min_side // 2,
-              :]
-
-    # rescale to standard size
-    img = transform.resize(img, (IMG_SIZE, IMG_SIZE))
-
-    # roll color axis to axis 0
-    img = np.rollaxis(img, -1)
-    cv2.namedWindow("after", cv2.WINDOW_AUTOSIZE)
-    cv2.imshow("after", img)
-    cv2.waitKey(10)
-    return img
-
-
-
-
+def copy_data_to_tmp():
+    os.mkdir("tmp")
+    print("[ ] Running gsutil command")
+    os.system("gsutil cp gs://eye-detection-storage/train_eye/images/* tmp/")
+    print("[ ] Finished, getting indexes")
+    os.system("gsutil cp gs://eye-detection-storage/indexes.txt indexes.txt")
 
 def load_data():
     train_datagen = ImageDataGenerator(
@@ -97,11 +72,12 @@ def load_data():
     counter = 0
     imgs = []
     lbls = []
-    with open(constants.TRAIN_INDEX_PATH, "r") as indexes_file:
+    with open("indexes.txt", "r") as indexes_file:
         for img_path, x_cor, y_cor in map(lambda x: x.split(), indexes_file.readlines()):
-            print img_path
+            print(img_path)
             try:
-                full_im_path = os.path.join(constants.TRAIN_IMAGES_PATH,img_path)
+                full_im_path = os.path.join("tmp",img_path)
+                print("[ ] Loading file : {0}".format(full_im_path))
                 img = cv2.imread(full_im_path)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 img = cv_classifiers.crop_face(img,IMG_SIZE)
@@ -113,13 +89,13 @@ def load_data():
                 for _ in range(0,15):
                     counter += 1
                     if counter % 100 == 0:
-                        print counter
+                        print(counter)
                     aug_img = train_datagen.flow(x).next()
                     aug_img = aug_img.reshape((1,300,300))
                     imgs.append(aug_img)
                     lbls.append((int(x_cor),int(y_cor)))
             except Exception as e:
-                print e
+                print(e)
                 continue
 
 
@@ -134,10 +110,9 @@ def lr_schedule(epoch):
 
 
 if __name__ == "__main__":
-
+    copy_data_to_tmp()
 
     X,y = load_data()
-
     model = cnn_model()
     lr = 0.01
     rmsprop = keras.optimizers.rmsprop(lr=0.01,decay=0.01)
@@ -148,7 +123,7 @@ if __name__ == "__main__":
                   metrics=['accuracy'])
 
     batch_size = 32
-    epochs = 40
+    epochs = 1
 
     model.fit(X, y,
               batch_size=batch_size,
@@ -157,7 +132,3 @@ if __name__ == "__main__":
               callbacks=[LearningRateScheduler(lr_schedule),
                          ModelCheckpoint('model.h5', save_best_only=True)]
               )
-
-
-    print X
-    print y

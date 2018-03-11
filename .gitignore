@@ -104,4 +104,6 @@ ENV/
 
 .idea/
 train_eye/images/
+train_eye/*.txt
+*.h5
 
