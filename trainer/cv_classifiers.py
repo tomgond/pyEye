@@ -9,13 +9,11 @@ import random
 
 
 
-upper_body= cv2.CascadeClassifier('haarcascade_mcs_upperbody.xml')
-frontal2 = cv2.CascadeClassifier('haarcascade_frontalface_alt2.xml')
-frontaldefault = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-mouth = cv2.CascadeClassifier('haarcascade_mcs_mouth.xml')
-left_eye = cv2.CascadeClassifier('haarcascade_mcs_lefteye.xml')
 
-classifiers = [upper_body, frontal2, frontaldefault, mouth, left_eye]
+
+classifiers = None
+
+
 # cas_temp = {}
 # cas_temp["haarcascade_mcs_lefteye.xml"] = cascades["haarcascade_mcs_lefteye.xml"]
 # cas_temp['haarcascade_mcs_mouth.xml'] = cascades['haarcascade_mcs_mouth.xml']
@@ -36,31 +34,31 @@ def load_all_cascades_in_dir():
     return cascades
 
 
-def has_upper_body(img):
-    cas_res = upper_body.detectMultiScale(img, 1.3, 5)
-    front_res = frontal2.detectMultiScale(img, 1.3, 5)
-    front_default_res = frontaldefault.detectMultiScale(img, 1.3, 5)
-    mouth_res = mouth.detectMultiScale(img, 1.3, 5)
-    l_eye_res = left_eye.detectMultiScale(img, 1.3, 5)
-    if (len(l_eye_res)+ len(mouth_res) +len(cas_res) + len(front_res) + len(front_default_res)) > 0 :
-        return True
-
-def test_specific_haar_classifiers():
-    total_images = 0
-    recognized_in = 0
-    for img_path in os.listdir("../train_eye/images"):
-        total_images += 1
-        if total_images % 50 == 0:
-            print(recognized_in)
-            print(total_images)
-            print("Total recognized : {0}".format(float(recognized_in) / total_images))
-        img_path = os.path.join("../train_eye/images",img_path)
-        img = cv2.imread(img_path)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        if has_upper_body(img):
-            recognized_in +=1
-    print("Total recognized : {0}".format(float(recognized_in)/total_images))
-    print("Finished")
+# def has_upper_body(img):
+#     cas_res = upper_body.detectMultiScale(img, 1.3, 5)
+#     front_res = frontal2.detectMultiScale(img, 1.3, 5)
+#     front_default_res = frontaldefault.detectMultiScale(img, 1.3, 5)
+#     mouth_res = mouth.detectMultiScale(img, 1.3, 5)
+#     l_eye_res = left_eye.detectMultiScale(img, 1.3, 5)
+#     if (len(l_eye_res)+ len(mouth_res) +len(cas_res) + len(front_res) + len(front_default_res)) > 0 :
+#         return True
+#
+# def test_specific_haar_classifiers():
+#     total_images = 0
+#     recognized_in = 0
+#     for img_path in os.listdir("../train_eye/images"):
+#         total_images += 1
+#         if total_images % 50 == 0:
+#             print(recognized_in)
+#             print(total_images)
+#             print("Total recognized : {0}".format(float(recognized_in) / total_images))
+#         img_path = os.path.join("../train_eye/images",img_path)
+#         img = cv2.imread(img_path)
+#         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+#         if has_upper_body(img):
+#             recognized_in +=1
+#     print("Total recognized : {0}".format(float(recognized_in)/total_images))
+#     print("Finished")
 
 
 def find_center(coor_list):
@@ -77,13 +75,28 @@ def find_center(coor_list):
         # y_sum += coor[1]
     return (statistics.median(x_s), statistics.median(y_s))
 
+def load_crop_classifiers():
+    global classifiers
+    if classifiers != None:
+        return
+    upper_body = cv2.CascadeClassifier(os.path.join('haar', 'haarcascade_mcs_upperbody.xml'))
+    frontal2 = cv2.CascadeClassifier(os.path.join('haar', 'haarcascade_frontalface_alt2.xml'))
+    frontaldefault = cv2.CascadeClassifier(os.path.join('haar', 'haarcascade_frontalface_default.xml'))
+    mouth = cv2.CascadeClassifier(os.path.join('haar', 'haarcascade_mcs_mouth.xml'))
+    left_eye = cv2.CascadeClassifier(os.path.join('haar', 'haarcascade_mcs_lefteye.xml'))
+    classifiers = [upper_body, frontal2, frontaldefault, mouth, left_eye]
 
 
 def crop_face(img, crop_size):
+    global classifiers
+    load_crop_classifiers()
+    print("[?] Croping img {0} with cropsize : {1}".format(img, crop_size))
     centers = []
     for clas in classifiers:
+        print("Using classifier: {0}".format(clas))
         detect = clas.detectMultiScale(img, 1.3, 5)
         for x,y,w,h in detect:
+            print("[?] Detected something")
             # cv2.rectangle(img, (x + (w / 2), y + (h / 2)), (x + (w / 2) + 10, y + (h / 2) + 10), (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)), 2)
             centers.append((x+(w/2), y+(h/2)))
     center = find_center(centers)

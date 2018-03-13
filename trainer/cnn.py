@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.abspath('..'))
 import numpy as np
 from keras.layers.normalization import BatchNormalization
 from skimage import transform
-from utils import constants
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers.convolutional import Conv2D
@@ -53,12 +52,16 @@ def crop_many_sizes(img):
     return crop_image
 
 
-def copy_data_to_tmp():
+def copy_data_from_gs():
     os.mkdir("tmp")
     print("[ ] Running gsutil command")
-    os.system("gsutil cp gs://eye-detection-storage/train_eye/images/* tmp/")
+    os.system("gsutil cp gs://eye-detection-storage/train_eye/images/13* tmp/")
     print("[ ] Finished, getting indexes")
     os.system("gsutil cp gs://eye-detection-storage/indexes.txt indexes.txt")
+    print("[ ] Getting haar cascades")
+    os.mkdir("haar")
+    os.system("gsutil cp gs://eye-detection-storage/haar_cascades/* haar/")
+
 
 def load_data():
     train_datagen = ImageDataGenerator(
@@ -78,15 +81,23 @@ def load_data():
             try:
                 full_im_path = os.path.join("tmp",img_path)
                 print("[ ] Loading file : {0}".format(full_im_path))
+                if not(os.path.exists(full_im_path)):
+                    continue
+                print("[V] File exists... we continue")
                 img = cv2.imread(full_im_path)
+                if len(img.shape) != 3:
+                    "[X] Did not read anything from cv2.imread"
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                if len(img.shape) != 3:
+                    "[X] Did not read anything from cv2.cvtColor"
                 img = cv_classifiers.crop_face(img,IMG_SIZE)
                 img = transform.resize(img, (IMG_SIZE, IMG_SIZE))
                 x = img_to_array(img)
                 x = x.reshape((1,) + x.shape)
+                print("[ ] Xs shape: {0}".format(x.shape))
                 i = 0
                 # imgs = train_datagen.flow(x, batch_size=1, save_to_dir='augment', save_prefix='{0}_{1}'.format(x_cor, y_cor), save_format='jpeg')
-                for _ in range(0,15):
+                for _ in range(0,5):
                     counter += 1
                     if counter % 100 == 0:
                         print(counter)
@@ -110,7 +121,7 @@ def lr_schedule(epoch):
 
 
 if __name__ == "__main__":
-    copy_data_to_tmp()
+    copy_data_from_gs()
 
     X,y = load_data()
     model = cnn_model()

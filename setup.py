@@ -12,5 +12,6 @@ setup(name='pyEye',
       install_requires=[
             'keras',
             'h5py',
-            'python-opencv'],
+            'statistics',
+            'scikit-image'],
       zip_safe=False)
