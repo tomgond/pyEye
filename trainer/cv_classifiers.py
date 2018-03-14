@@ -90,13 +90,10 @@ def load_crop_classifiers():
 def crop_face(img, crop_size):
     global classifiers
     load_crop_classifiers()
-    print("[?] Croping img {0} with cropsize : {1}".format(img, crop_size))
     centers = []
     for clas in classifiers:
-        print("Using classifier: {0}".format(clas))
         detect = clas.detectMultiScale(img, 1.3, 5)
         for x,y,w,h in detect:
-            print("[?] Detected something")
             # cv2.rectangle(img, (x + (w / 2), y + (h / 2)), (x + (w / 2) + 10, y + (h / 2) + 10), (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)), 2)
             centers.append((x+(w/2), y+(h/2)))
     center = find_center(centers)

@@ -25,7 +25,8 @@ from keras import backend as K
 
 K.set_image_data_format('channels_first')
 
-IMG_SIZE = 300
+CROP_SIZE = 250
+IMG_SIZE = 100
 
 
 def euc_dist_keras(y_true, y_pred):
@@ -63,6 +64,18 @@ def copy_data_from_gs():
     os.system("gsutil cp gs://eye-detection-storage/haar_cascades/* haar/")
 
 
+def img_reprocess(img, crop_size=CROP_SIZE, img_size=IMG_SIZE):
+    if len(img.shape) != 3:
+        "[X] Did not read anything from cv2.imread"
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if len(img.shape) != 3:
+        "[X] Did not read anything from cv2.cvtColor"
+    img = cv_classifiers.crop_face(img, crop_size)
+    img = cv2.resize(img, (img_size, img_size))
+    return img
+
+
+
 def load_data():
     train_datagen = ImageDataGenerator(
         width_shift_range=0.2,
@@ -85,13 +98,7 @@ def load_data():
                     continue
                 print("[V] File exists... we continue")
                 img = cv2.imread(full_im_path)
-                if len(img.shape) != 3:
-                    "[X] Did not read anything from cv2.imread"
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                if len(img.shape) != 3:
-                    "[X] Did not read anything from cv2.cvtColor"
-                img = cv_classifiers.crop_face(img,IMG_SIZE)
-                img = transform.resize(img, (IMG_SIZE, IMG_SIZE))
+                img = img_reprocess(img,crop_size=CROP_SIZE, resize_size=IMG_SIZE)
                 x = img_to_array(img)
                 x = x.reshape((1,) + x.shape)
                 print("[ ] Xs shape: {0}".format(x.shape))
@@ -115,6 +122,9 @@ def load_data():
     Y = np.array(lbls)
     return X, Y
 
+
+
+
 def lr_schedule(epoch):
     return lr * (0.1 ** int(epoch / 10))
 
@@ -122,6 +132,8 @@ def lr_schedule(epoch):
 
 if __name__ == "__main__":
     copy_data_from_gs()
+    print(os.getcwd())
+    print(os.listdir("."))
 
     X,y = load_data()
     model = cnn_model()
