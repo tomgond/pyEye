@@ -26,7 +26,7 @@ from keras import backend as K
 K.set_image_data_format('channels_first')
 
 CROP_SIZE = 250
-IMG_SIZE = 100
+IMG_SIZE = 150
 
 
 def euc_dist_keras(y_true, y_pred):
@@ -41,6 +41,7 @@ def cnn_model():
     model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(BatchNormalization())
     model.add(Flatten())
+    model.add(Dense(200, activation='relu'))
     model.add(Dense(100, activation='relu'))
     model.add(Dropout(0.5))
     model.add(Dense(2))
@@ -56,12 +57,12 @@ def crop_many_sizes(img):
 def copy_data_from_gs():
     os.mkdir("tmp")
     print("[ ] Running gsutil command")
-    os.system("gsutil cp gs://eye-detection-storage/train_eye/images/13* tmp/")
+    os.system("gsutil cp gs://pyeye_bucket/data/images/* tmp/")
     print("[ ] Finished, getting indexes")
-    os.system("gsutil cp gs://eye-detection-storage/indexes.txt indexes.txt")
+    os.system("gsutil cp gs://pyeye_bucket/data/indexes.txt indexes.txt")
     print("[ ] Getting haar cascades")
     os.mkdir("haar")
-    os.system("gsutil cp gs://eye-detection-storage/haar_cascades/* haar/")
+    os.system("gsutil cp gs://pyeye_bucket/haar_cascades/* haar/")
 
 
 def img_reprocess(img, crop_size=CROP_SIZE, img_size=IMG_SIZE):
@@ -97,8 +98,7 @@ def load_data():
                 if not(os.path.exists(full_im_path)):
                     continue
                 print("[V] File exists... we continue")
-                img = cv2.imread(full_im_path)
-                img = img_reprocess(img,crop_size=CROP_SIZE, resize_size=IMG_SIZE)
+                img = cv2.imread(full_im_path, cv2.IMREAD_GRAYSCALE)
                 x = img_to_array(img)
                 x = x.reshape((1,) + x.shape)
                 print("[ ] Xs shape: {0}".format(x.shape))
@@ -109,7 +109,7 @@ def load_data():
                     if counter % 100 == 0:
                         print(counter)
                     aug_img = train_datagen.flow(x).next()
-                    aug_img = aug_img.reshape((1,300,300))
+                    aug_img = aug_img[0]
                     imgs.append(aug_img)
                     lbls.append((int(x_cor),int(y_cor)))
             except Exception as e:
@@ -155,3 +155,5 @@ if __name__ == "__main__":
               callbacks=[LearningRateScheduler(lr_schedule),
                          ModelCheckpoint('model.h5', save_best_only=True)]
               )
+    
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/next_try.h5") 
