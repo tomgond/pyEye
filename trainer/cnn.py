@@ -38,6 +38,7 @@ def cnn_model():
                      activation='relu',
                      input_shape=(1,IMG_SIZE,IMG_SIZE)))
     model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same'))
+    model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(BatchNormalization())
     model.add(Flatten())
@@ -145,8 +146,8 @@ if __name__ == "__main__":
                   optimizer=adam,
                   metrics=['accuracy'])
 
-    batch_size = 32
-    epochs = 1
+    batch_size = 40
+    epochs = 32
 
     model.fit(X, y,
               batch_size=batch_size,
