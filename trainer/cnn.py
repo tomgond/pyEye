@@ -57,7 +57,7 @@ def crop_many_sizes(img):
 def copy_data_from_gs():
     os.mkdir("tmp")
     print("[ ] Running gsutil command")
-    os.system("gsutil cp gs://pyeye_bucket/data/images/* tmp/")
+    os.system("gsutil -m cp gs://pyeye_bucket/data/images/* tmp/")
     print("[ ] Finished, getting indexes")
     os.system("gsutil cp gs://pyeye_bucket/data/indexes.txt indexes.txt")
     print("[ ] Getting haar cascades")
