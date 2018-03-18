@@ -1,24 +1,15 @@
 import sys
+import math
 from keras.preprocessing.image import ImageDataGenerator, img_to_array
 import trainer.cv_classifiers as cv_classifiers
-import random
-import json
-from gcloud import storage
+import trainer.models
 import keras
 import os
 sys.path.insert(0, os.path.abspath('..'))
 import numpy as np
-from keras.layers.normalization import BatchNormalization
-from skimage import transform
-from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation, Flatten
-from keras.layers.convolutional import Conv2D
-from keras.layers.pooling import MaxPooling2D
-from keras import backend as K
 from keras.optimizers import SGD
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 import cv2
-import time
 import os
 from keras import backend as K
 
@@ -35,30 +26,14 @@ LEFT_SCREEN_AVG_Y = 500
 RIGHT_SCREEN_AVG_X = -1150
 RIGHT_SCREEN_AVG_Y = 455
 
+MAX_DISTANCE_FROM_CENTER = 1280
+
+RESAMPLE_FACTOR  = 10
+
+
 def euc_dist_keras(y_true, y_pred):
     return K.sqrt(K.sum(K.square(y_true - y_pred), axis=-1, keepdims=True))
 
-def cnn_model():
-    model = Sequential()
-    model.add(Conv2D(32, kernel_size=(3, 3),
-                     activation='relu',
-                     input_shape=(1,IMG_SIZE,IMG_SIZE)))
-    model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same'))
-    model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(BatchNormalization())
-    model.add(Flatten())
-    model.add(Dense(200, activation='relu'))
-    model.add(Dense(100, activation='relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(2))
-    return model
-
-def crop_many_sizes(img):
-    y = random.randint(0, 340)
-    x = random.randint(0, 180)
-    crop_image = img[x:x+300, y:y+300]
-    return crop_image
 
 
 def copy_data_from_gs():
@@ -83,6 +58,15 @@ def img_reprocess(img, crop_size=CROP_SIZE, img_size=IMG_SIZE):
     return img
 
 
+def number_of_samples_from_image_coors(x, y):
+    if x > 0:
+        dist = math.sqrt(sum([pow(x-LEFT_SCREEN_AVG_X,2), pow(y-LEFT_SCREEN_AVG_Y,2)]))
+    else:
+        dist = math.sqrt(sum([pow(x - RIGHT_SCREEN_AVG_X,2), pow(y - RIGHT_SCREEN_AVG_Y,2)]))
+    return math.ceil((float(dist)/MAX_DISTANCE_FROM_CENTER)*RESAMPLE_FACTOR)
+
+
+
 
 def load_data():
     train_datagen = ImageDataGenerator(
@@ -98,20 +82,22 @@ def load_data():
     lbls = []
     with open("indexes.txt", "r") as indexes_file:
         for img_path, x_cor, y_cor in map(lambda x: x.split(), indexes_file.readlines()):
-            print(img_path)
+            # print(img_path)
             try:
                 full_im_path = os.path.join("tmp",img_path)
-                print("[ ] Loading file : {0}".format(full_im_path))
+                # print("[ ] Loading file : {0}".format(full_im_path))
                 if not(os.path.exists(full_im_path)):
                     continue
                 print("[V] File exists... we continue")
+                n_resample = number_of_samples_from_image_coors(int(x_cor),int(y_cor))
+                print("Sampling with : {0}".format(n_resample))
                 img = cv2.imread(full_im_path, cv2.IMREAD_GRAYSCALE)
                 x = img_to_array(img)
                 x = x.reshape((1,) + x.shape)
                 print("[ ] Xs shape: {0}".format(x.shape))
                 i = 0
                 # imgs = train_datagen.flow(x, batch_size=1, save_to_dir='augment', save_prefix='{0}_{1}'.format(x_cor, y_cor), save_format='jpeg')
-                for _ in range(0,5):
+                for _ in range(0,n_resample):
                     counter += 1
                     if counter % 100 == 0:
                         print(counter)
@@ -143,7 +129,7 @@ if __name__ == "__main__":
     print(os.listdir("."))
 
     X,y = load_data()
-    model = cnn_model()
+    model = trainer.models.cnn_model_2(IMG_SIZE)
     lr = 0.01
     rmsprop = keras.optimizers.rmsprop(lr=0.01,decay=0.01)
     sgd = SGD(lr=lr, decay=1e-6, momentum=0.9, nesterov=True)
@@ -153,7 +139,7 @@ if __name__ == "__main__":
                   metrics=['accuracy'])
 
     batch_size = 40
-    epochs = 32
+    epochs = 20
 
     model.fit(X, y,
               batch_size=batch_size,
@@ -163,4 +149,4 @@ if __name__ == "__main__":
                          ModelCheckpoint('model.h5', save_best_only=True)]
               )
     
-    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/next_try.h5") 
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/sunday_night.h5")
