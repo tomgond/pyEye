@@ -29,6 +29,12 @@ CROP_SIZE = 250
 IMG_SIZE = 150
 
 
+LEFT_SCREEN_AVG_X = 798
+LEFT_SCREEN_AVG_Y = 500
+
+RIGHT_SCREEN_AVG_X = -1150
+RIGHT_SCREEN_AVG_Y = 455
+
 def euc_dist_keras(y_true, y_pred):
     return K.sqrt(K.sum(K.square(y_true - y_pred), axis=-1, keepdims=True))
 
