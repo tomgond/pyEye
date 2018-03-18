@@ -63,7 +63,7 @@ def number_of_samples_from_image_coors(x, y):
         dist = math.sqrt(sum([pow(x-LEFT_SCREEN_AVG_X,2), pow(y-LEFT_SCREEN_AVG_Y,2)]))
     else:
         dist = math.sqrt(sum([pow(x - RIGHT_SCREEN_AVG_X,2), pow(y - RIGHT_SCREEN_AVG_Y,2)]))
-    return math.ceil((float(dist)/MAX_DISTANCE_FROM_CENTER)*RESAMPLE_FACTOR)
+    return int(math.ceil((float(dist)/MAX_DISTANCE_FROM_CENTER)*RESAMPLE_FACTOR))
 
 
 
