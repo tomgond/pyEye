@@ -28,7 +28,7 @@ RIGHT_SCREEN_AVG_Y = 455
 
 MAX_DISTANCE_FROM_CENTER = 1280
 
-RESAMPLE_FACTOR  = 10
+RESAMPLE_FACTOR  = 11
 
 
 def euc_dist_keras(y_true, y_pred):
@@ -134,6 +134,8 @@ if __name__ == "__main__":
     rmsprop = keras.optimizers.rmsprop(lr=0.01,decay=0.01)
     sgd = SGD(lr=lr, decay=1e-6, momentum=0.9, nesterov=True)
     adam = keras.optimizers.Adam(lr=0.01, beta_1=0.9, beta_2=0.99, decay=0.001)
+    adagrad = keras.optimizers.Adagrad(lr=0.01, epsilon=None, decay=0.0)
+    adadelta = keras.optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
     model.compile(loss=euc_dist_keras,
                   optimizer=adam,
                   metrics=['accuracy'])
@@ -149,4 +151,4 @@ if __name__ == "__main__":
                          ModelCheckpoint('model.h5', save_best_only=True)]
               )
     
-    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/sunday_night.h5")
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/model3_adam.h5")
