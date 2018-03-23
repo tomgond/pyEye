@@ -1,5 +1,6 @@
 import sys
 import math
+import psutil
 
 from keras.layers import Flatten, Dense, Dropout, BatchNormalization
 from keras.preprocessing.image import ImageDataGenerator, img_to_array
@@ -14,6 +15,7 @@ from keras.optimizers import SGD
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 import cv2
 import os
+import gc
 from keras import backend as K, Model
 
 K.set_image_data_format('channels_first')
@@ -30,7 +32,14 @@ RIGHT_SCREEN_AVG_Y = 455
 
 MAX_DISTANCE_FROM_CENTER = 1280
 
-RESAMPLE_FACTOR  = 5
+RESAMPLE_FACTOR  = 4
+
+def print_memory_statistics():
+    process = psutil.Process(os.getpid())
+    print("======= Memory info ==============")
+    print("Memory percent: {0}".format(process.memory_percent()))
+    print("Full memory info : {0}".format(process.memory_full_info()))
+
 
 
 def euc_dist_keras(y_true, y_pred):
@@ -70,8 +79,67 @@ def number_of_samples_from_image_coors(x, y):
 
 
 
+def load_data_ver2(images_base_path="tmp", grayscale=False, preprocessing_model=None):
+    print("[ ] Entering load data.")
+    print_memory_statistics()
+    train_datagen = ImageDataGenerator(
+        width_shift_range=0.2,
+        height_shift_range=0.2,
+        shear_range=0.2,
+        zoom_range=0.2,
+        data_format="channels_first",
+        horizontal_flip=False,
+        fill_mode='nearest',
+        preprocessing_function=lambda x: preprocessing_model.predict(x))
+    imgs = []
+    lbls = []
+    with open("indexes.txt", "r") as indexes_file:
+        i = 0
+        counter=0
+        for img_path, x_cor, y_cor in map(lambda x: x.split(), indexes_file.readlines()):
+            i += 1
+            if i % 1000 == 0:
+                gc.collect()
+                print_memory_statistics()
+                print("[ ] Images in X : {0}".format(i))
+            # print(img_path)
+            try:
+                full_im_path = os.path.join(images_base_path,img_path)
+                # print("[ ] Loading file : {0}".format(full_im_path))
+                if not(os.path.exists(full_im_path)):
+                    continue
+                n_resample = number_of_samples_from_image_coors(int(x_cor),int(y_cor))
+                #print("Sampling with : {0}".format(n_resample))
+                if grayscale:
+                    img = cv2.imread(full_im_path, cv2.IMREAD_GRAYSCALE)
+                else:
+                    img = cv2.imread(full_im_path)
+                x = img_to_array(img)
+                x = x.reshape((1,) + x.shape)
+                for _ in range(0,n_resample):
+                    counter += 1
+                    if counter % 1000 == 0:
+                        print("Number of images in final test set:{0}".format(counter))
+                    aug_img = train_datagen.flow(x).next()
+                    aug_img = aug_img[0]
+                    imgs.append(aug_img)
+                    lbls.append((int(x_cor),int(y_cor)))
+            except Exception as e:
+                print(e)
+                continue
+
+    X = np.array(imgs, dtype='float32')
+    # Make one hot targets
+    Y = np.array(lbls)
+    return X, Y
+
+
+
+
 
 def load_data(images_base_path="tmp", grayscale=False):
+    print("[ ] Entering load data.")
+    print_memory_statistics()
     train_datagen = ImageDataGenerator(
         width_shift_range=0.2,
         height_shift_range=0.2,
@@ -80,15 +148,16 @@ def load_data(images_base_path="tmp", grayscale=False):
         data_format="channels_first",
         horizontal_flip=False,
         fill_mode='nearest')
-    counter = 0
     imgs = []
     lbls = []
     with open("indexes.txt", "r") as indexes_file:
         i = 0
         counter=0
         for img_path, x_cor, y_cor in map(lambda x: x.split(), indexes_file.readlines()):
-            i+=1
+            i += 1
             if i % 1000 == 0:
+                gc.collect()
+                print_memory_statistics()
                 print("[ ] Images in X : {0}".format(i))
             # print(img_path)
             try:
@@ -160,8 +229,8 @@ def transfer_learning(model_name, last_layer):
     my_model.add(Dense(2))
     adam = keras.optimizers.Adam(lr=0.01, beta_1=0.9, beta_2=0.99, decay=0.001)
     my_model.compile(optimizer=adam, loss=euc_dist_keras, metrics=['accuracy'])
-    batch_size = 20
-    epochs = 20
+    batch_size = 40
+    epochs = 30
 
     my_model.fit(np.array(features), y,
               batch_size=batch_size,

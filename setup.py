@@ -13,5 +13,6 @@ setup(name='pyEye',
             'keras',
             'h5py',
             'statistics',
-            'scikit-image'],
+            'scikit-image',
+            'psutil'],
       zip_safe=False)
