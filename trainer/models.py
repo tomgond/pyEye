@@ -1,8 +1,14 @@
-from keras import Sequential
-from keras.layers.core import Dense, Dropout, Activation, Flatten
-from keras.layers.convolutional import Conv2D
+from keras import Sequential, Input, Model
+from keras.layers.core import Dense, Dropout, Activation, Flatten, Lambda
+from keras.layers.convolutional import Conv2D, Convolution2D, ZeroPadding2D
 from keras.layers.pooling import MaxPooling2D
 from keras.layers.normalization import BatchNormalization
+from keras.applications import vgg16, VGG16
+from keras.legacy.layers import merge
+
+
+
+
 
 def cnn_model_1(img_size):
     model = Sequential()
@@ -58,3 +64,4 @@ def cnn_model_3(img_size):
     model.add(Dropout(0.5))
     model.add(Dense(2))
     return model
+

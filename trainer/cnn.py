@@ -1,6 +1,9 @@
 import sys
 import math
+
+from keras.layers import Flatten, Dense, Dropout, BatchNormalization
 from keras.preprocessing.image import ImageDataGenerator, img_to_array
+from keras.applications import VGG16
 import trainer.cv_classifiers as cv_classifiers
 import trainer.models
 import keras
@@ -11,8 +14,7 @@ from keras.optimizers import SGD
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 import cv2
 import os
-from keras import backend as K
-
+from keras import backend as K, Model
 
 K.set_image_data_format('channels_first')
 
@@ -28,30 +30,31 @@ RIGHT_SCREEN_AVG_Y = 455
 
 MAX_DISTANCE_FROM_CENTER = 1280
 
-RESAMPLE_FACTOR  = 11
+RESAMPLE_FACTOR  = 5
 
 
 def euc_dist_keras(y_true, y_pred):
     return K.sqrt(K.sum(K.square(y_true - y_pred), axis=-1, keepdims=True))
 
 
-
-def copy_data_from_gs():
+def copy_data_from_gs(images_dir="gs://pyeye_bucket/data/images_VGG16/", pir_prefix="132*", index_path="gs://pyeye_bucket/data/indexes.txt" , to_save_dir='tmp/'):
     os.mkdir("tmp")
     print("[ ] Running gsutil command")
-    os.system("gsutil -m cp gs://pyeye_bucket/data/images/* tmp/")
+    os.system("gsutil -m cp {0}{1} {2}".format(images_dir,pir_prefix, to_save_dir))
     print("[ ] Finished, getting indexes")
-    os.system("gsutil cp gs://pyeye_bucket/data/indexes.txt indexes.txt")
+    os.system("gsutil cp {0} indexes.txt".format(index_path))
     print("[ ] Getting haar cascades")
     os.mkdir("haar")
     os.system("gsutil cp gs://pyeye_bucket/haar_cascades/* haar/")
 
 
-def img_reprocess(img, crop_size=CROP_SIZE, img_size=IMG_SIZE):
+
+def img_reprocess(img, crop_size=CROP_SIZE, img_size=IMG_SIZE, to_greyscale=True):
     if len(img.shape) != 3:
         "[X] Did not read anything from cv2.imread"
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    if len(img.shape) != 3:
+    if to_greyscale:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if len(img.shape) > 2:
         "[X] Did not read anything from cv2.cvtColor"
     img = cv_classifiers.crop_face(img, crop_size)
     img = cv2.resize(img, (img_size, img_size))
@@ -68,7 +71,7 @@ def number_of_samples_from_image_coors(x, y):
 
 
 
-def load_data():
+def load_data(images_base_path="tmp", grayscale=False):
     train_datagen = ImageDataGenerator(
         width_shift_range=0.2,
         height_shift_range=0.2,
@@ -81,26 +84,30 @@ def load_data():
     imgs = []
     lbls = []
     with open("indexes.txt", "r") as indexes_file:
+        i = 0
+        counter=0
         for img_path, x_cor, y_cor in map(lambda x: x.split(), indexes_file.readlines()):
+            i+=1
+            if i % 1000 == 0:
+                print("[ ] Images in X : {0}".format(i))
             # print(img_path)
             try:
-                full_im_path = os.path.join("tmp",img_path)
+                full_im_path = os.path.join(images_base_path,img_path)
                 # print("[ ] Loading file : {0}".format(full_im_path))
                 if not(os.path.exists(full_im_path)):
                     continue
-                print("[V] File exists... we continue")
                 n_resample = number_of_samples_from_image_coors(int(x_cor),int(y_cor))
-                print("Sampling with : {0}".format(n_resample))
-                img = cv2.imread(full_im_path, cv2.IMREAD_GRAYSCALE)
+                #print("Sampling with : {0}".format(n_resample))
+                if grayscale:
+                    img = cv2.imread(full_im_path, cv2.IMREAD_GRAYSCALE)
+                else:
+                    img = cv2.imread(full_im_path)
                 x = img_to_array(img)
                 x = x.reshape((1,) + x.shape)
-                print("[ ] Xs shape: {0}".format(x.shape))
-                i = 0
-                # imgs = train_datagen.flow(x, batch_size=1, save_to_dir='augment', save_prefix='{0}_{1}'.format(x_cor, y_cor), save_format='jpeg')
                 for _ in range(0,n_resample):
                     counter += 1
-                    if counter % 100 == 0:
-                        print(counter)
+                    if counter % 1000 == 0:
+                        print("Number of images in final test set:{0}".format(counter))
                     aug_img = train_datagen.flow(x).next()
                     aug_img = aug_img[0]
                     imgs.append(aug_img)
@@ -108,7 +115,6 @@ def load_data():
             except Exception as e:
                 print(e)
                 continue
-
 
     X = np.array(imgs, dtype='float32')
     # Make one hot targets
@@ -119,14 +125,63 @@ def load_data():
 
 
 def lr_schedule(epoch):
+    lr = 0.01
     return lr * (0.1 ** int(epoch / 10))
+
+
+def transfer_learning(model_name, last_layer):
+    base_model = VGG16(weights='imagenet', include_top=False, input_shape=(3, 224, 224))
+    base_model.summary()
+
+    VGG_convolution_only = Model(input=base_model.input, output=base_model.get_layer('block5_pool').output)
+
+    X, y = load_data(images_base_path="tmp")
+    features = []
+    i = 0
+    print("Shape of input X matrix:")
+    print(X.shape)
+    for x_img, coors in zip(X,y):
+        if i%1000 == 0:
+            print("We're at : {0}".format(i))
+        x_img = np.expand_dims(x_img, axis=0)
+        features.append(VGG_convolution_only.predict(x_img))
+        i +=1
+    np_features = np.array(features)
+    np_features = np_features.squeeze(1)
+    print("Saving features")
+    np.save("np_features.np", np_features)
+    print("Features saved")
+    print("Features size : {0}".format(os.path.getsize("np_features.np.npy")))
+    my_model = keras.models.Sequential()
+    my_model.add(Flatten(input_shape=features[0].shape))
+    my_model.add(Dense(1000, activation='relu'))
+    my_model.add(Dropout(0.5))
+    my_model.add(Dense(4000, activation='relu'))
+    my_model.add(Dense(2))
+    adam = keras.optimizers.Adam(lr=0.01, beta_1=0.9, beta_2=0.99, decay=0.001)
+    my_model.compile(optimizer=adam, loss=euc_dist_keras, metrics=['accuracy'])
+    batch_size = 20
+    epochs = 20
+
+    my_model.fit(np.array(features), y,
+              batch_size=batch_size,
+              epochs=epochs,
+              validation_split=0.2,
+              callbacks=[LearningRateScheduler(lr_schedule),
+                         ModelCheckpoint('model.h5', save_best_only=True)]
+              )
+
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/the_madman_has_done_it.h5")
+    # compile the model with a SGD/momentum optimizer
+    # and a very slow learning rate.
 
 
 
 if __name__ == "__main__":
-    copy_data_from_gs()
-    print(os.getcwd())
-    print(os.listdir("."))
+    copy_data_from_gs(images_dir="gs://pyeye_bucket/data/images_VGG16/", index_path="gs://pyeye_bucket/data/indexes.txt", pir_prefix="*")
+    transfer_learning('VGG16', 'fc2')
+    exit(0)
+
 
     X,y = load_data()
     model = trainer.models.cnn_model_2(IMG_SIZE)
