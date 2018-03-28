@@ -4,7 +4,7 @@ import random
 import math
 import psutil
 from pprint import pprint
-from keras.layers import Flatten, Dense, Dropout, BatchNormalization
+from keras.layers import Flatten, Dense, Dropout, BatchNormalization, regularizers, GaussianDropout
 from keras.preprocessing.image import ImageDataGenerator, img_to_array
 from keras.applications import VGG16
 import trainer.cv_classifiers as cv_classifiers
@@ -18,7 +18,7 @@ from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 import cv2
 import os
 import gc
-from keras import backend as K, Model
+from keras import backend as K, Model, optimizers
 
 K.set_image_data_format('channels_first')
 
@@ -61,31 +61,30 @@ class DataGenerator(object):
             if os.path.exists(os.path.join(images_folder_path,itm[0])) and itm[0] in subset:
                 x_val = int(itm[1].strip())
                 y_val = int(itm[2].strip())
-                data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample": number_of_samples_from_image_coors(x_val,y_val)}
+                full_im_path = os.path.join(self.images_folder_path, itm[0])
+                img = cv2.imread(full_im_path)
+                x = img_to_array(img)
+                x = x.reshape((1,) + x.shape)
+                data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample": number_of_samples_from_image_coors(x_val,y_val), "img_vector":x}
+
         print("Generator created with {0} images".format(len(data_dict.keys())))
         self.data = data_dict
 
 
     def image_name_to_K_predicted_VGG_outputs(self,img_name, k):
         train_datagen = ImageDataGenerator(
-            width_shift_range=0.2,
-            height_shift_range=0.2,
-            shear_range=0.2,
-            zoom_range=0.2,
+            width_shift_range=0.3,
+            height_shift_range=0.3,
             data_format="channels_first",
             horizontal_flip=False,
             fill_mode='nearest')
-        full_im_path = os.path.join(self.images_folder_path, img_name)
-        img = cv2.imread(full_im_path)
-        x = img_to_array(img)
-        x = x.reshape((1,) + x.shape)
 
         output = np.empty((k,) + VGG_CON_FEATURES_OUTPUT_SHAPE)
         for i in range(0, k):
             self.counter += 1  # N generated
             if self.counter % 1000 == 0:
                 print("Number of images in final test set:{0}".format(self.counter))
-            aug_img = train_datagen.flow(x).next()
+            aug_img = train_datagen.flow(self.data[img_name]["img_vector"], batch_size=self.resample_k).next()
             features = self.predict_model.predict(aug_img)
             features = features[0]
             output[i] = features
@@ -307,7 +306,6 @@ def random_train_val_split(index_file_path,images_folder_path, test_ratio = 0.8)
     with open(index_file_path, 'r') as infile:
         lines = infile.readlines()
     t_list = map(lambda x: x.split(" "), lines)
-    data_dict = {}
     train = []
     val = []
     for itm in t_list:
@@ -326,7 +324,7 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
 
     VGG_convolution_only = Model(input=base_model.input, output=base_model.get_layer('block5_pool').output)
     VGG_convolution_only._make_predict_function()
-    train_set, val_set = random_train_val_split(index_path, images_dir, test_ratio=0.8)
+    train_set, val_set = random_train_val_split(index_path, images_dir, test_ratio=0.7)
     print("[?] Train set size = {0}".format(len(train_set)))
     print("[?] eval set size = {0}".format(len(val_set)))
     train_gen = DataGenerator(index_path, images_dir, predict_model=VGG_convolution_only, subset=train_set, resample_k=resample_k, images_per_batch=images_per_batch).generate()
@@ -335,14 +333,18 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
 
     my_model = keras.models.Sequential()
     my_model.add(Flatten(input_shape=VGG_CON_FEATURES_OUTPUT_SHAPE))
-    my_model.add(Dense(1000, activation='relu'))
     my_model.add(Dropout(0.5))
-    my_model.add(Dense(4000, activation='relu'))
+    my_model.add(Dense(200, activation='relu'))
+    my_model.add(Dropout(0.5))
+    my_model.add(Dense(150, activation='relu'))
     my_model.add(Dense(2))
-    adam = keras.optimizers.Adam(lr=0.01, beta_1=0.9, beta_2=0.99, decay=0.001)
-    my_model.compile(optimizer=adam, loss=euc_dist_keras, metrics=['accuracy'])
+    adam = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+    adagrad = keras.optimizers.Adagrad(lr=0.01, epsilon=None, decay=0.0)
+    rmsprop = keras.optimizers.rmsprop(lr=0.1, decay=0.01)
+    # sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    my_model.compile(optimizer=adagrad, loss=euc_dist_keras, metrics=['accuracy'])
 
-    epochs = 20
+    epochs = 5
     print("Training model : \n Steps per epoch : {0} \n epochs: {1}".format((len(train_set) // images_per_batch), epochs))
 
     my_model.fit_generator(generator=train_gen,
@@ -352,8 +354,9 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
                            # callbacks=[LearningRateScheduler(lr_schedule),
                            #      ModelCheckpoint('model.h5', save_best_only=True)],
                            epochs=epochs)
+    my_model.save("model.h5")
 
-    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/the_madman_has_done_it.h5")
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/rmsprop_optimizer_batches.h5")
     # compile the model with a SGD/momentum optimizer
     # and a very slow learning rate.
 
@@ -364,7 +367,7 @@ if __name__ == "__main__":
     index_path = "gs://pyeye_bucket/data/indexes.txt"
     pir_prefix = "*"
     copy_data_from_gs(images_dir=images_dir, index_path=index_path, pir_prefix=pir_prefix)
-    transfer_learning(images_dir="tmp", index_path="indexes.txt", resample_k=6, images_per_batch=6)
+    transfer_learning(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=20)
     exit(0)
 
 
