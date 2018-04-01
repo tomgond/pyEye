@@ -110,14 +110,7 @@ def crop_face(img, crop_size):
     return cropped_image
 
 if __name__ == "__main__":
-
-
-    for i,img_path in enumerate(os.listdir("../train_eye/images")):
-        img_path = os.path.join("../train_eye/images",img_path)
-        img = cv2.imread(img_path)
-        print(i)
-        crop_face(img, 300)
-
+    pass
 
 
 

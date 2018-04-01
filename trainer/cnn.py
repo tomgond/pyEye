@@ -316,6 +316,17 @@ def random_train_val_split(index_file_path,images_folder_path, test_ratio = 0.8)
                 train.append(itm[0])
     return train, val
 
+def get_my_prediction_model():
+    my_model = keras.models.Sequential()
+    my_model.add(Flatten(input_shape=VGG_CON_FEATURES_OUTPUT_SHAPE))
+    my_model.add(Dropout(0.5))
+    my_model.add(Dense(1500, activation='relu'))
+    my_model.add(Dense(970, activation='relu'))
+    my_model.add(Dense(300, activation='relu'))
+    my_model.add(Dropout(0.5))
+    my_model.add(Dense(2))
+    return my_model
+
 
 def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_per_batch=4):
     batch_size = resample_k * images_per_batch
@@ -331,20 +342,14 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
     val_gen = DataGenerator(index_path, images_dir, predict_model=VGG_convolution_only, subset=val_set, resample_k=resample_k, images_per_batch=images_per_batch).generate()
 
 
-    my_model = keras.models.Sequential()
-    my_model.add(Flatten(input_shape=VGG_CON_FEATURES_OUTPUT_SHAPE))
-    my_model.add(Dropout(0.5))
-    my_model.add(Dense(200, activation='relu'))
-    my_model.add(Dropout(0.5))
-    my_model.add(Dense(150, activation='relu'))
-    my_model.add(Dense(2))
+    my_model = get_my_prediction_model()
     adam = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
     adagrad = keras.optimizers.Adagrad(lr=0.01, epsilon=None, decay=0.0)
     rmsprop = keras.optimizers.rmsprop(lr=0.1, decay=0.01)
     # sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     my_model.compile(optimizer=adagrad, loss=euc_dist_keras, metrics=['accuracy'])
 
-    epochs = 5
+    epochs = 30
     print("Training model : \n Steps per epoch : {0} \n epochs: {1}".format((len(train_set) // images_per_batch), epochs))
 
     my_model.fit_generator(generator=train_gen,
@@ -356,7 +361,7 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
                            epochs=epochs)
     my_model.save("model.h5")
 
-    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/rmsprop_optimizer_batches.h5")
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/this_is_kickasss.h5")
     # compile the model with a SGD/momentum optimizer
     # and a very slow learning rate.
 
