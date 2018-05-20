@@ -14,5 +14,6 @@ setup(name='pyEye',
             'h5py',
             'statistics',
             'scikit-image',
-            'psutil'],
+            'psutil',
+            'face_recognition'],
       zip_safe=False)

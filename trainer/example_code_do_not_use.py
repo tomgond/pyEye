@@ -1,233 +1,78 @@
-
-import numpy as np
+# import the necessary packages
+from imutils import face_utils
 import os
-import time
-from vgg16 import VGG16
-from keras.preprocessing import image
-from keras.applications.imagenet_utils import preprocess_input
-from imagenet_utils import decode_predictions
-from keras.layers import Dense, Activation, Flatten
-from keras.layers import merge, Input
-from keras.models import Model
-from keras.utils import np_utils
-from sklearn.utils import shuffle
-from sklearn.cross_validation import train_test_split
+import numpy as np
+import argparse
+import imutils
+import dlib
+import cv2
 
-img_path = 'elephant.jpg'
-img = image.load_img(img_path, target_size=(224, 224))
-x = image.img_to_array(img)
-print (x.shape)
-x = np.expand_dims(x, axis=0)
-print (x.shape)
-x = preprocess_input(x)
-print('Input image shape:', x.shape)
+# construct the argument parser and parse the arguments
+ap = argparse.ArgumentParser()
+ap.add_argument("-p", "--shape-predictor", required=True,
+                help="path to facial landmark predictor")
+ap.add_argument("-i", "--image", required=True,
+                help="path to input image")
+args = {}
+args["shape_predictor"] = "face_predictor.dat"
+args["image"] = "tmp/101035.jpg"
 
-# Loading the training data
-PATH = os.getcwd()
-# Define data path
-data_path = PATH + '/data'
-data_dir_list = os.listdir(data_path)
-
-img_data_list=[]
-
-for dataset in data_dir_list:
-	img_list=os.listdir(data_path+'/'+ dataset)
-	print ('Loaded the images of dataset-'+'{}\n'.format(dataset))
-	for img in img_list:
-		img_path = data_path + '/'+ dataset + '/'+ img
-		img = image.load_img(img_path, target_size=(224, 224))
-		x = image.img_to_array(img)
-		x = np.expand_dims(x, axis=0)
-		x = preprocess_input(x)
-#		x = x/255
-		print('Input image shape:', x.shape)
-		img_data_list.append(x)
-
-img_data = np.array(img_data_list)
-#img_data = img_data.astype('float32')
-print (img_data.shape)
-img_data=np.rollaxis(img_data,1,0)
-print (img_data.shape)
-img_data=img_data[0]
-print (img_data.shape)
-
-
-# Define the number of classes
-num_classes = 4
-num_of_samples = img_data.shape[0]
-labels = np.ones((num_of_samples,),dtype='int64')
-
-labels[0:202]=0
-labels[202:404]=1
-labels[404:606]=2
-labels[606:]=3
-
-names = ['cats','dogs','horses','humans']
-
-# convert class labels to on-hot encoding
-Y = np_utils.to_categorical(labels, num_classes)
-
-#Shuffle the dataset
-x,y = shuffle(img_data,Y, random_state=2)
-# Split the dataset
-X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=2)
-
-#########################################################################################
-# Custom_vgg_model_1
-#Training the classifier alone
-image_input = Input(shape=(224, 224, 3))
-
-model = VGG16(input_tensor=image_input, include_top=True,weights='imagenet')
-model.summary()
-last_layer = model.get_layer('fc2').output
-#x= Flatten(name='flatten')(last_layer)
-out = Dense(num_classes, activation='softmax', name='output')(last_layer)
-custom_vgg_model = Model(image_input, out)
-custom_vgg_model.summary()
-
-for layer in custom_vgg_model.layers[:-1]:
-	layer.trainable = False
-
-custom_vgg_model.layers[3].trainable
-
-custom_vgg_model.compile(loss='categorical_crossentropy',optimizer='rmsprop',metrics=['accuracy'])
-
-
-t=time.time()
-#	t = now()
-hist = custom_vgg_model.fit(X_train, y_train, batch_size=32, epochs=12, verbose=1, validation_data=(X_test, y_test))
-print('Training time: %s' % (t - time.time()))
-(loss, accuracy) = custom_vgg_model.evaluate(X_test, y_test, batch_size=10, verbose=1)
-
-print("[INFO] loss={:.4f}, accuracy: {:.4f}%".format(loss,accuracy * 100))
-
-
-####################################################################################################################
-
-#Training the feature extraction also
-
-image_input = Input(shape=(224, 224, 3))
-
-model = VGG16(input_tensor=image_input, include_top=True,weights='imagenet')
-
-model.summary()
-
-last_layer = model.get_layer('block5_pool').output
-x= Flatten(name='flatten')(last_layer)
-x = Dense(128, activation='relu', name='fc1')(x)
-x = Dense(128, activation='relu', name='fc2')(x)
-out = Dense(num_classes, activation='softmax', name='output')(x)
-custom_vgg_model2 = Model(image_input, out)
-custom_vgg_model2.summary()
-
-# freeze all the layers except the dense layers
-for layer in custom_vgg_model2.layers[:-3]:
-	layer.trainable = False
-
-custom_vgg_model2.summary()
-
-custom_vgg_model2.compile(loss='categorical_crossentropy',optimizer='adadelta',metrics=['accuracy'])
-
-t=time.time()
-#	t = now()
-hist = custom_vgg_model2.fit(X_train, y_train, batch_size=32, epochs=12, verbose=1, validation_data=(X_test, y_test))
-print('Training time: %s' % (t - time.time()))
-(loss, accuracy) = custom_vgg_model2.evaluate(X_test, y_test, batch_size=10, verbose=1)
-
-print("[INFO] loss={:.4f}, accuracy: {:.4f}%".format(loss,accuracy * 100))
-
-#%%
-import matplotlib.pyplot as plt
-# visualizing losses and accuracy
-train_loss=hist.history['loss']
-val_loss=hist.history['val_loss']
-train_acc=hist.history['acc']
-val_acc=hist.history['val_acc']
-xc=range(12)
-
-plt.figure(1,figsize=(7,5))
-plt.plot(xc,train_loss)
-plt.plot(xc,val_loss)
-plt.xlabel('num of Epochs')
-plt.ylabel('loss')
-plt.title('train_loss vs val_loss')
-plt.grid(True)
-plt.legend(['train','val'])
-#print plt.style.available # use bmh, classic,ggplot for big pictures
-plt.style.use(['classic'])
-
-plt.figure(2,figsize=(7,5))
-plt.plot(xc,train_acc)
-plt.plot(xc,val_acc)
-plt.xlabel('num of Epochs')
-plt.ylabel('accuracy')
-plt.title('train_acc vs val_acc')
-plt.grid(True)
-plt.legend(['train','val'],loc=4)
-#print plt.style.available # use bmh, classic,ggplot for big pictures
-plt.style.use(['classic'])
+# initialize dlib's face detector (HOG-based) and then create
+# the facial landmark predictor
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor(args["shape_predictor"])
+imgs = os.listdir("../train_eye/images")
 
 
 
+for img_path in imgs:
+    image = cv2.imread(os.path.join("../train_eye/images/",img_path))
+    image = imutils.resize(image, width=500)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-from keras.models import Model
+    # detect faces in the grayscale image
+    rects = detector(gray, 1)
+    # loop over the face detections
+    for (i, rect) in enumerate(rects):
+        # determine the facial landmarks for the face region, then
+        # convert the landmark (x, y)-coordinates to a NumPy array
 
-def vgg16_model(img_rows, img_cols, channel=1, num_classes=None):
+        cp = image[rect.top():rect.bottom(),rect.left():rect.right()]
+        cp = imutils.resize(cp, width=250, inter=cv2.INTER_CUBIC)
+        cv2.imshow("rect", cp)
 
-    model = VGG16(weights='imagenet', include_top=True)
+        shape = predictor(gray, rect)
+        shape = face_utils.shape_to_np(shape)
+        # image = image[rect[0]]
+        # cv2.imshow("foobar", )
+        # loop over the face parts individually
+        tmp_imgs = []
+        for (name, (i, j)) in list(filter(lambda x: x[0] in ["right_eye","left_eye"],face_utils.FACIAL_LANDMARKS_IDXS.items())):
+            print(name)
+            # clone the original image so we can draw on it, then
+            # display the name of the face part on the image
+            clone = image.copy()
+            cv2.putText(clone, name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7, (0, 0, 255), 2)
 
-    model.layers.pop()
+            # loop over the subset of facial landmarks, drawing the
+            # specific face part
+            # for (x, y) in shape[i:j]:
+            #     cv2.circle(clone, (x, y), 1, (0, 0, 255), -1)
 
-    model.outputs = [model.layers[-1].output]
 
-    model.layers[-1].outbound_nodes = []
+                # extract the ROI of the face region as a separate image
+            (x, y, w, h) = cv2.boundingRect(np.array([shape[i:j]]))
+            roi = image[y:y + h, x:x + w]
+            roi = imutils.resize(roi, width=150, height=150, inter=cv2.INTER_CUBIC)
+            one_eye = {"roi" : roi, "clone":clone}
+            tmp_imgs.append(one_eye)
+            # show the particular face part
+        for j,tmp_img in enumerate(tmp_imgs):
+            cv2.imshow(str(j)+"1", tmp_img["roi"])
+        cv2.waitKey(0)
 
-    x=Dense(num_classes, activation='softmax')(model.output)
-
-    model=Model(model.input,x)
-
-#To set the first 8 layers to non-trainable (weights will not be updated)
-
-    for layer in model.layers[:8]:
-
-       layer.trainable = False
-
-# Learning rate is changed to 0.001
-    sgd = SGD(lr=1e-3, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
-
-    return model
-
-train_y=np.asarray(train['label'])
-
-le = LabelEncoder()
-
-train_y = le.fit_transform(train_y)
-
-train_y=to_categorical(train_y)
-
-train_y=np.array(train_y)
-
-from sklearn.model_selection import train_test_split
-X_train, X_valid, Y_train, Y_valid=train_test_split(train_img,train_y,test_size=0.2, random_state=42)
-
-# Example to fine-tune on 3000 samples from Cifar10
-
-img_rows, img_cols = 224, 224 # Resolution of inputs
-channel = 3
-num_classes = 10
-batch_size = 16
-nb_epoch = 10
-
-# Load our model
-model = vgg16_model(img_rows, img_cols, channel, num_classes)
-
-model.summary()
-# Start Fine-tuning
-model.fit(X_train, Y_train,batch_size=batch_size,epochs=nb_epoch,shuffle=True,verbose=1,validation_data=(X_valid, Y_valid))
-
-# Make predictions
-predictions_valid = model.predict(X_valid, batch_size=batch_size, verbose=1)
-
-# Cross-entropy loss score
-score = log_loss(Y_valid, predictions_valid)
+        # visualize all facial landmarks with a transparent overlay
+        output = face_utils.visualize_facial_landmarks(image, shape)
+        cv2.imshow("Image", output)
+        cv2.waitKey(0)

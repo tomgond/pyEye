@@ -2,7 +2,7 @@ import os
 
 from keras import Model
 from keras.applications import VGG16
-
+from trainer.models import *
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 from keras.models import load_model
@@ -33,7 +33,7 @@ def predict_mul_images(x):
     return x,y
 
 webcam = init_webcam()
-mdl = cnn.get_my_prediction_model()
+mdl = transfer_v2()
 mdl.load_weights("my_model.h5")
 
 train_datagen = ImageDataGenerator(
@@ -51,7 +51,7 @@ base_model.summary()
 VGG_convolution_only = Model(input=base_model.input, output=base_model.get_layer('block5_pool').output)
 VGG_convolution_only._make_predict_function()
 
-pred_model = cnn.get_my_prediction_model()
+
 
 while True:
     input()
@@ -69,6 +69,7 @@ while True:
     x = x.reshape((1,) + x.shape)
     x,y = mdl.predict(VGG_convolution_only.predict(x))[0]
     print("{0} {1}".format(int(x),int(y)))
+
     click(int(x), int(y))
 
 print(mdl)
