@@ -30,7 +30,7 @@ def predict_mul_images(x):
 
 webcam = init_webcam()
 mdl = cnn_model()
-mdl.load_weights("../ML/model_702.h5")
+mdl.load_weights("2000_first_layer.h5")
 
 train_datagen = ImageDataGenerator(
     width_shift_range=0.2,

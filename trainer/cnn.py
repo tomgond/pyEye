@@ -1,12 +1,13 @@
+import numpy
+import scipy.misc
+import platform
 import sys
-import dlib
-import pdb
-import imutils
-from imutils import face_utils
+# import dlib
+# import pdb
 import random
 import math
 import psutil
-import face_recognition
+# import dlib
 import trainer.models
 from pprint import pprint
 from keras.layers import Flatten, Dense, Dropout, BatchNormalization, regularizers, GaussianDropout
@@ -18,6 +19,7 @@ import keras
 import os
 
 from trainer import models
+from trainer.run_trainer import run_name
 
 sys.path.insert(0, os.path.abspath('..'))
 import numpy as np
@@ -33,6 +35,13 @@ K.set_image_data_format('channels_first')
 CROP_SIZE = 250
 IMG_SIZE = 150
 
+N_CHANNELS = 3
+
+FACE_IMAGE_SIZE_X = 250
+FACE_IMAGE_SIZE_Y = 250
+
+EYE_IMAGE_SIZE_X = 100
+EYE_IMAGE_SIZE_Y = 150
 
 LEFT_SCREEN_AVG_X = 798
 LEFT_SCREEN_AVG_Y = 500
@@ -49,8 +58,10 @@ VGG_CON_FEATURES_OUTPUT_SHAPE = (512,7,7)
 
 import numpy as np
 
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("face_predictor.dat")
+def my_img_to_array(cv2_img):
+    x = img_to_array(cv2_img)
+    x = x.reshape((1,) + x.shape)
+    return x
 
 class DataGenerator(object):
     'Generates data for Keras'
@@ -73,19 +84,36 @@ class DataGenerator(object):
             if os.path.exists(os.path.join(images_folder_path,itm[0])) and itm[0] in subset:
                 x_val = int(itm[1].strip())
                 y_val = int(itm[2].strip())
-                full_im_path = os.path.join(self.images_folder_path, itm[0])
-                img = cv2.imread(full_im_path)
-                x = img_to_array(img)
-                x = x.reshape((1,) + x.shape)
-                resample = number_of_samples_from_image_coors(x_val, y_val)
-                data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample": resample, "img_vector":x}
+                face_path = os.path.join(self.images_folder_path, itm[0], "face.jpg")
+                left_eye_path = os.path.join(self.images_folder_path, itm[0], "left_eye.jpg")
+                right_eye_path = os.path.join(self.images_folder_path, itm[0], "right_eye.jpg")
+
+                if N_CHANNELS==1:
+                    img_face = cv2.resize(cv2.cvtColor(cv2.imread(face_path), cv2.COLOR_BGR2GRAY),
+                                          (FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y))
+                    img_left_eye = cv2.resize(cv2.cvtColor(cv2.imread(left_eye_path), cv2.COLOR_BGR2GRAY),
+                                              (EYE_IMAGE_SIZE_Y,EYE_IMAGE_SIZE_X))
+                    img_right_eye = cv2.resize(cv2.cvtColor(cv2.imread(right_eye_path), cv2.COLOR_BGR2GRAY),
+                                               (EYE_IMAGE_SIZE_Y,EYE_IMAGE_SIZE_X))
+                else:
+                    img_face = cv2.resize(cv2.imread(face_path), (FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y))
+                    #
+                    img_left_eye = cv2.resize(cv2.imread(left_eye_path), (EYE_IMAGE_SIZE_Y, EYE_IMAGE_SIZE_X))
+                    #
+                    img_right_eye = cv2.resize(cv2.imread(right_eye_path), (EYE_IMAGE_SIZE_Y, EYE_IMAGE_SIZE_X))
+
+
+
+                # resample = number_of_samples_from_image_coors(x_val, y_val)
+                resample = 2
+                data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample" : resample, "face_vector":my_img_to_array(img_face) , "left_eye_vector" : my_img_to_array(img_left_eye), "right_eye_vector" : my_img_to_array(img_right_eye)}
                 self.total_images_with_aug += resample
         print("Generator created with {0} images, {1} images with augmentation".format(len(data_dict.keys()), self.total_images_with_aug))
         self.steps_per_epoch = self.total_images_with_aug // self.images_per_batch
         self.data = data_dict
 
 
-    def image_name_to_K_predicted_VGG_outputs(self,img_name, k):
+    def image_name_to_K_predicted_my_output(self,img_name, k):
         train_datagen = ImageDataGenerator(
             width_shift_range=0.3,
             height_shift_range=0.3,
@@ -110,7 +138,58 @@ class DataGenerator(object):
             output[i] = features
         return output
 
+    def show_image_from_array(self, img_arr):
+        # zz = Image.
+        open_cv_image = numpy.array(zz)
+        open_cv_image = open_cv_image[:, :, ::-1].copy()
+        cv2.imshow('bla', open_cv_image)
+        cv2.waitKey(10)
+
     def generate(self):
+        train_datagen = ImageDataGenerator(
+            width_shift_range=0.3,
+            height_shift_range=0.3,
+            data_format="channels_first",
+            horizontal_flip=False,
+            fill_mode='nearest')
+
+        keys = list(self.data.keys())
+        keys_len = len(keys)
+
+        faces_buf = np.zeros((self.batch_size, N_CHANNELS, FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y))
+        left_eye_buf = np.zeros((self.batch_size, N_CHANNELS, EYE_IMAGE_SIZE_X, EYE_IMAGE_SIZE_Y))
+        right_eye_buf = np.zeros((self.batch_size, N_CHANNELS, EYE_IMAGE_SIZE_X, EYE_IMAGE_SIZE_Y))
+        i = 0
+        while 1:
+            Xs = []
+            Ys = []
+            for img_idx in range(0, self.batch_size):
+                if i == len(keys):
+                    i=0
+                chosen_img = keys[i]
+                some_data = self.data[chosen_img]
+
+                # faces_buf[img_idx] = np.random.rand(*some_data['face_vector'].shape)
+                # left_eye_buf[img_idx] = np.random.rand(*some_data['left_eye_vector'].shape)
+                # right_eye_buf[img_idx] = np.random.rand(*some_data['right_eye_vector'].shape)
+                #
+                faces_buf[img_idx] = train_datagen.flow(some_data['face_vector']).next()[0]
+                left_eye_buf[img_idx] = train_datagen.flow(some_data['left_eye_vector']).next()[0]
+                right_eye_buf[img_idx] = train_datagen.flow(some_data['right_eye_vector']).next()[0]
+                Ys.append(some_data['lbl'])
+                i+=1
+            faces_buf /= 255
+            left_eye_buf /= 255
+            right_eye_buf /= 255
+
+            # print(faces_buf.shape)
+            # print(faces_buf.max())
+            Xs = [faces_buf, left_eye_buf, right_eye_buf]
+
+
+            yield Xs, np.array(Ys)
+
+    def generate_backup(self):
         'Generates batches of samples'
         # Infinite loop
 
@@ -189,9 +268,9 @@ def euc_dist_keras(y_true, y_pred):
 def copy_data_from_gs(images_dir="gs://pyeye_bucket/data/images_VGG16/", pir_prefix="132*", index_path="gs://pyeye_bucket/data/indexes.txt" , to_save_dir='tmp/'):
     os.mkdir("tmp")
     print("[ ] Running gsutil command")
-    os.system("gsutil -m cp {0}{1} {2}".format(images_dir,pir_prefix, to_save_dir))
+    os.system("gsutil -m cp -r {0}{1} {2}".format(images_dir,pir_prefix, to_save_dir))
     print("[ ] Finished, getting indexes")
-    os.system("gsutil cp {0} indexes.txt".format(index_path))
+    os.system("gsutil cp {0} tmp/indexes.txt".format(index_path))
     print("[ ] Getting haar cascades")
     os.mkdir("haar")
     os.system("gsutil cp gs://pyeye_bucket/haar_cascades/* haar/")
@@ -451,48 +530,89 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
     # and a very slow learning rate.
 
 
-def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=10):
+def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=10, test_ratio=0.777, local_run=False):
 
-    train_set, val_set = random_train_val_split(index_path, images_dir, test_ratio=0.5)
+    train_set, val_set = random_train_val_split(index_path, images_dir, test_ratio=test_ratio)
     train_gen = DataGenerator(index_path, images_dir, predict_model=None, subset=train_set,
                               resample_k=resample_k, images_per_batch=images_per_batch)
     val_gen = DataGenerator(index_path, images_dir, predict_model=None, subset=val_set,
                             resample_k=resample_k, images_per_batch=images_per_batch)
 
-    model = trainer.models.cnn_model_all_me(224)
+    model = trainer.models.cnn_model_multiple_inputs((N_CHANNELS,FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y), (N_CHANNELS, EYE_IMAGE_SIZE_X, EYE_IMAGE_SIZE_Y))
+    model.summary()
     lr = 0.01
-    adagrad = keras.optimizers.Adagrad(lr=0.01, epsilon=None, decay=0.0)
+    
+    adadelta = keras.optimizers.Adadelta()
+    adam = keras.optimizers.Adam()
+
+
+    # adam = keras.optimizers.Adam()
+    # rmsprop = keras.optimizers.rmsprop(lr=0.1, decay=0.01)
     model.compile(loss=euc_dist_keras,
-                  optimizer=adagrad,
+                  optimizer=adadelta,
                   metrics=['accuracy'])
 
-    epochs = 15
+    epochs = 30
+    print("Training model : \n"
+          "Images per batch: {0}\n"
+          "Train set images (including aug): {1}\n"
+          "Val set images (including aug): {2}\n"
+          "Train set steps: {3}\n"
+          "Val set steps: {4}\n".format(
+        images_per_batch,
+        train_gen.total_images_with_aug,
+        val_gen.total_images_with_aug,
+        train_gen.steps_per_epoch,
+        val_gen.steps_per_epoch))
 
-    model.fit_generator(generator=train_gen.generate(),
-                           steps_per_epoch=train_gen.steps_per_epoch ,
-                           validation_data=val_gen.generate(),
-                           validation_steps=val_gen.steps_per_epoch,
-                           # callbacks=[LearningRateScheduler(lr_schedule),
-                           #      ModelCheckpoint('model.h5', save_best_only=True)],
-                           epochs=epochs)
+    if not local_run:
+        tensorboard_callback = keras.callbacks.TensorBoard(log_dir='gs://pyeye_bucket/jobs/logs/run/{0}'.format(run_name), histogram_freq=0,
+              write_graph=True, write_images=True)
+    else:
+        tensorboard_callback = None
+    if local_run:
+        model.fit_generator(generator=train_gen.generate(),
+                               steps_per_epoch=train_gen.steps_per_epoch ,
+                               validation_data=val_gen.generate(),
+                               validation_steps=val_gen.steps_per_epoch,
+                               # callbacks=[LearningRateScheduler(lr_schedule),
+                               #      ModelCheckpoint('model.h5', save_best_only=True)],
+                               epochs=epochs,
+                            )
+    else:
+        model.fit_generator(generator=train_gen.generate(),
+                            steps_per_epoch=train_gen.steps_per_epoch,
+                            validation_data=val_gen.generate(),
+                            validation_steps=val_gen.steps_per_epoch,
+                            callbacks=[tensorboard_callback],
+                            #      ModelCheckpoint('model.h5', save_best_only=True)],
+                            epochs=epochs,
+                            )
 
-    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/only_me_no_transfer.h5")
-
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/{0}.h5".format(run_name))
 
 
 if __name__ == "__main__":
-    images_dir = "gs://pyeye_bucket/data/images_VGG16/"
-    index_path = "gs://pyeye_bucket/data/indexes.txt"
+    images_dir = "gs://pyeye_bucket/data/output_landmarks/"
+    index_path = "gs://pyeye_bucket/data/output_landmarks/indexes_landmarks.txt"
     pir_prefix = "*"
 
-    exit()
-    imgs = os.listdir("tmp")
-    for img in imgs:
-        image = cv2.imread(os.path.join("tmp", img))
-        get_entire_face_from_img(image)
-    # copy_data_from_gs(images_dir=images_dir, index_path=index_path, pir_prefix=pir_prefix)
+    if platform.node() == 'xkcd':
+        imgs_per_batch = 10
+        test_ratio = 0.5
+        local_run = True
+    else:
+        test_ratio = 0.777
+        imgs_per_batch = 40
+        local_run = False
+        copy_data_from_gs(images_dir=images_dir, index_path=index_path, pir_prefix=pir_prefix)
+
+    all_me_model(images_dir="tmp", index_path="tmp/indexes.txt", images_per_batch=imgs_per_batch, test_ratio=test_ratio, local_run=local_run)
+
+
+
     # transfer_learning(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=32)
-    all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=5)
+    # all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=5)
     exit(0)
 
 
