@@ -1,7 +1,7 @@
 import os
 from random import randint
 
-run_name = "ada_delta_might_work"
+run_name = "for_luck"
 
 
 if __name__ == "__main__":

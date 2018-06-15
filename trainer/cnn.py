@@ -1,6 +1,7 @@
 import numpy
 import scipy.misc
 import platform
+
 import sys
 # import dlib
 # import pdb
@@ -105,7 +106,7 @@ class DataGenerator(object):
 
 
                 # resample = number_of_samples_from_image_coors(x_val, y_val)
-                resample = 2
+                resample = 3
                 data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample" : resample, "face_vector":my_img_to_array(img_face) , "left_eye_vector" : my_img_to_array(img_left_eye), "right_eye_vector" : my_img_to_array(img_right_eye)}
                 self.total_images_with_aug += resample
         print("Generator created with {0} images, {1} images with augmentation".format(len(data_dict.keys()), self.total_images_with_aug))
@@ -523,7 +524,7 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
                            # callbacks=[LearningRateScheduler(lr_schedule),
                            #      ModelCheckpoint('model.h5', save_best_only=True)],
                            epochs=epochs)
-    my_model.save("model.h5")
+    my_model.save_weights("model.h5")
 
     os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/selu_bigger_model_more_samples_train.h5")
     # compile the model with a SGD/momentum optimizer
@@ -544,6 +545,7 @@ def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, image
     
     adadelta = keras.optimizers.Adadelta()
     adam = keras.optimizers.Adam()
+    adagrad = keras.optimizers.Adagrad()
 
 
     # adam = keras.optimizers.Adam()
@@ -552,7 +554,7 @@ def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, image
                   optimizer=adadelta,
                   metrics=['accuracy'])
 
-    epochs = 30
+    epochs = 2
     print("Training model : \n"
           "Images per batch: {0}\n"
           "Train set images (including aug): {1}\n"
@@ -578,16 +580,19 @@ def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, image
                                # callbacks=[LearningRateScheduler(lr_schedule),
                                #      ModelCheckpoint('model.h5', save_best_only=True)],
                                epochs=epochs,
+                               callbacks=[ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True)]
                             )
     else:
         model.fit_generator(generator=train_gen.generate(),
                             steps_per_epoch=train_gen.steps_per_epoch,
                             validation_data=val_gen.generate(),
                             validation_steps=val_gen.steps_per_epoch,
-                            callbacks=[tensorboard_callback],
+                            callbacks=[tensorboard_callback, ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True)],
                             #      ModelCheckpoint('model.h5', save_best_only=True)],
                             epochs=epochs,
                             )
+
+
 
     os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/{0}.h5".format(run_name))
 
@@ -602,7 +607,7 @@ if __name__ == "__main__":
         test_ratio = 0.5
         local_run = True
     else:
-        test_ratio = 0.777
+        test_ratio = 0.8
         imgs_per_batch = 40
         local_run = False
         copy_data_from_gs(images_dir=images_dir, index_path=index_path, pir_prefix=pir_prefix)

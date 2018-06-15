@@ -90,49 +90,58 @@ def transfer_v1():
     my_model.add(Dense(2))
     return my_model
 
+KERNEL_SIZE = 2
+MAX_POOL_SIZE = 3
+
 def cnn_model_multiple_inputs(face_shape, eye_shape):
 
     face_input = Input(shape=face_shape, name='face_input') #dtype='int32', name='main_input')
     left_eye_input = Input(shape=eye_shape, name='left_eye_input')
     right_eye_input = Input(shape=eye_shape, name='right_eye_input')
 
-    face_x = (Conv2D(20, kernel_size=(2, 2),
-                     activation='selu',
+    face_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE),
+                     activation='sigmoid',
                      input_shape=face_input.shape))(face_input)
-    face_x = (MaxPooling2D((3,3)))(face_x)
-    face_x = (Conv2D(20, kernel_size=(2, 2), activation='relu', padding='same'))(face_x)
-    face_x = (MaxPooling2D((3,3)))(face_x)
-    face_x = (Conv2D(20, kernel_size=(2, 2), activation='selu', padding='same'))(face_x)
-    face_x = (MaxPooling2D((3,3)))(face_x)
+    face_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(face_x)
+    face_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'))(face_x)
+    face_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(face_x)
+    face_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='tanh', padding='same'))(face_x)
+    face_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(face_x)
+    face_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'))(face_x)
+    face_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(face_x)
     face_x = Flatten()(face_x)
     face_x = Dropout(0.4)(face_x)
-    face_x = Dense(2000,activation='relu')(face_x)
+    face_x = Dense(2200,activation='selu')(face_x)
     face_x = BatchNormalization()(face_x)
 
-    left_eye_x = (Conv2D(20, kernel_size=(2,2),
-            activation='relu',
+    left_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE),
+            activation='sigmoid',
             input_shape=left_eye_input.shape))(left_eye_input)
-    left_eye_x = (MaxPooling2D((3,3)))(left_eye_x)
-    left_eye_x = (Conv2D(20, kernel_size=(2,2), activation='tanh', padding='same'))(left_eye_x)
-    left_eye_x = (MaxPooling2D((3,3)))(left_eye_x)
-    left_eye_x = (Conv2D(20, kernel_size=(2,2), activation='sigmoid', padding='same'))(left_eye_x)
-    left_eye_x = (MaxPooling2D((3,3)))(left_eye_x)
+    left_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(left_eye_x)
+    left_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='selu', padding='same'))(left_eye_x)
+    left_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(left_eye_x)
+    left_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'))(left_eye_x)
+    left_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(left_eye_x)
+    left_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'))(left_eye_x)
+    left_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(left_eye_x)
     left_eye_x = Flatten()(left_eye_x)
     left_eye_x = Dropout(0.4)(left_eye_x)
-    left_eye_x = Dense(2000,activation='selu')(left_eye_x)
+    left_eye_x = Dense(2200,activation='tanh')(left_eye_x)
     left_eye_x = BatchNormalization()(left_eye_x)
 
-    right_eye_x = (Conv2D(20, kernel_size=(2,2),
+    right_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE),
             activation='relu',
             input_shape=right_eye_input.shape))(right_eye_input)
-    right_eye_x = (MaxPooling2D((3,3)))(right_eye_x)
-    right_eye_x = (Conv2D(20, kernel_size=(2,2), activation='selu', padding='same'))(right_eye_x)
-    right_eye_x = (MaxPooling2D((3,3)))(right_eye_x)
-    right_eye_x = (Conv2D(20, kernel_size=(2,2), activation='relu', padding='same'))(right_eye_x)
-    right_eye_x = (MaxPooling2D((3,3)))(right_eye_x)
+    right_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(right_eye_x)
+    right_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='sigmoid', padding='same'))(right_eye_x)
+    right_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(right_eye_x)
+    right_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='tanh', padding='same'))(right_eye_x)
+    right_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(right_eye_x)
+    right_eye_x = (Conv2D(20, kernel_size=(KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'))(right_eye_x)
+    right_eye_x = (MaxPooling2D((MAX_POOL_SIZE,MAX_POOL_SIZE)))(right_eye_x)
     right_eye_x = Flatten()(right_eye_x)
-    right_eye_x = Dropout(0.2)(right_eye_x)
-    right_eye_x = Dense(2000, activation='relu')(right_eye_x)
+    right_eye_x = Dropout(0.4)(right_eye_x)
+    right_eye_x = Dense(2200, activation='sigmoid')(right_eye_x)
     right_eye_x = BatchNormalization()(right_eye_x)
 
     joint_layer = keras.layers.Concatenate()([left_eye_x, face_x, right_eye_x])
@@ -146,5 +155,7 @@ def cnn_model_multiple_inputs(face_shape, eye_shape):
     joint_layer = Dense(250, activation='sigmoid')(joint_layer)
     joint_layer = Dropout(0.5)(joint_layer)
     joint_layer = Dense(100, activation='sigmoid')(joint_layer)
+    joint_layer = Dropout(0.5)(joint_layer)
+    joint_layer = Dense(50, activation='sigmoid')(joint_layer)
     model_output = Dense(2)(joint_layer)
     return Model(inputs=[face_input, left_eye_input, right_eye_input], outputs=model_output)
