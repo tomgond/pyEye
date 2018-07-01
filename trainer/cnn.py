@@ -1,7 +1,6 @@
 import numpy
 import scipy.misc
 import platform
-
 import sys
 # import dlib
 # import pdb
@@ -9,6 +8,8 @@ import random
 import math
 import psutil
 # import dlib
+from keras.wrappers.scikit_learn import KerasClassifier
+
 import trainer.models
 from pprint import pprint
 from keras.layers import Flatten, Dense, Dropout, BatchNormalization, regularizers, GaussianDropout
@@ -106,7 +107,7 @@ class DataGenerator(object):
 
 
                 # resample = number_of_samples_from_image_coors(x_val, y_val)
-                resample = 3
+                resample = 4
                 data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample" : resample, "face_vector":my_img_to_array(img_face) , "left_eye_vector" : my_img_to_array(img_left_eye), "right_eye_vector" : my_img_to_array(img_right_eye)}
                 self.total_images_with_aug += resample
         print("Generator created with {0} images, {1} images with augmentation".format(len(data_dict.keys()), self.total_images_with_aug))
@@ -531,6 +532,96 @@ def transfer_learning(images_dir=None, index_path=None, resample_k=10, images_pe
     # and a very slow learning rate.
 
 
+def train_one_model(params, tensorboard_directory, tensorboard_name, train_gen, val_gen, test_epochs):
+    pprint(params)
+    if not local_run:
+        tensorboard_callback = keras.callbacks.TensorBoard(
+            log_dir='gs://pyeye_bucket/jobs/logs/{0}/{1}'.format(tensorboard_directory, tensorboard_name),
+            histogram_freq=0,
+            write_graph=True, write_images=True)
+        callbacks = [ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True), tensorboard_callback]
+    else:
+        callbacks = [ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True)]
+
+    model = trainer.models.cnn_model_multiple_inputs(params=params)
+    model.summary()
+    model.fit_generator(generator=train_gen.generate(),
+                        steps_per_epoch=train_gen.steps_per_epoch,
+                        validation_data=val_gen.generate(),
+                        validation_steps=val_gen.steps_per_epoch,
+                        # callbacks=[LearningRateScheduler(lr_schedule),
+                        #      ModelCheckpoint('model.h5', save_best_only=True)],
+                        epochs=test_epochs,
+                        callbacks=callbacks
+                        )
+    fn = numpy.polyfit(range(0, test_epochs), model.history.history['val_loss'], 1)
+    print("Run : {0}, score: {1}".format(tensorboard_name, fn))
+    return fn
+
+def hyperparam_optimization(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=10, test_ratio=0.777, local_run=False):
+    train_set, val_set = random_train_val_split(index_path, images_dir, test_ratio=test_ratio)
+    train_gen = DataGenerator(index_path, images_dir, predict_model=None, subset=train_set,
+                              resample_k=resample_k, images_per_batch=images_per_batch)
+    val_gen = DataGenerator(index_path, images_dir, predict_model=None, subset=val_set,
+                            resample_k=resample_k, images_per_batch=images_per_batch)
+
+    # optimizers = ['adadelta', 'rmsprop']
+    optimizers = ['adadelta']
+    test_epochs = 6
+    res_dict = {}
+
+    params = {}
+    params['conv_funcs'] = 40
+    params['kernel_size'] = (2, 2)
+    params['max_pooling'] = (4, 4)
+    params['optimizer'] = 'adadelta'
+    params['dropout'] = 0.1
+    params['initial_final_layer'] = 3000
+    params['final_layers'] = 3
+    params['final_layer_decrease_factor'] = 0.7
+    params['lr'] = 0.5
+
+    # Start one model training
+    train_one_model(params, "run", run_name, train_gen, val_gen, 40)
+    os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/{0}.h5".format(run_name))
+    exit()
+    # End one model training
+
+
+    for this_param in [30,35,40,45,50]:
+        params['conv_funcs'] = this_param
+        pprint(params)
+        if not local_run:
+            tensorboard_callback = keras.callbacks.TensorBoard(
+                log_dir='gs://pyeye_bucket/jobs/logs/dropout/{0}_{1}_rand_{1}'.format(run_name, this_param, random.randint(0,1000)), histogram_freq=0,
+                write_graph=True, write_images=True)
+            callbacks = [ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True), tensorboard_callback]
+        else:
+            tensorboard_callback = None
+            callbacks = [ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True)]
+
+
+
+        model = trainer.models.cnn_model_multiple_inputs(params=params)
+        model.summary()
+        model.fit_generator(generator=train_gen.generate(),
+                               steps_per_epoch=train_gen.steps_per_epoch ,
+                               validation_data=val_gen.generate(),
+                               validation_steps=val_gen.steps_per_epoch,
+                               # callbacks=[LearningRateScheduler(lr_schedule),
+                               #      ModelCheckpoint('model.h5', save_best_only=True)],
+                               epochs=test_epochs,
+                               callbacks=callbacks
+                            )
+        fn = numpy.polyfit(range(0,test_epochs), model.history.history['val_loss'],1)
+        print("Optimizer: {0}, Results: {1}".format(this_param, fn))
+        res_dict[this_param]=fn
+    print(res_dict)
+
+
+
+
+
 def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=10, test_ratio=0.777, local_run=False):
 
     train_set, val_set = random_train_val_split(index_path, images_dir, test_ratio=test_ratio)
@@ -567,31 +658,23 @@ def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, image
         train_gen.steps_per_epoch,
         val_gen.steps_per_epoch))
 
+
     if not local_run:
         tensorboard_callback = keras.callbacks.TensorBoard(log_dir='gs://pyeye_bucket/jobs/logs/run/{0}'.format(run_name), histogram_freq=0,
               write_graph=True, write_images=True)
+        callbacks = [ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True), tensorboard_callback]
     else:
         tensorboard_callback = None
-    if local_run:
-        model.fit_generator(generator=train_gen.generate(),
-                               steps_per_epoch=train_gen.steps_per_epoch ,
-                               validation_data=val_gen.generate(),
-                               validation_steps=val_gen.steps_per_epoch,
-                               # callbacks=[LearningRateScheduler(lr_schedule),
-                               #      ModelCheckpoint('model.h5', save_best_only=True)],
-                               epochs=epochs,
-                               callbacks=[ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True)]
-                            )
-    else:
-        model.fit_generator(generator=train_gen.generate(),
-                            steps_per_epoch=train_gen.steps_per_epoch,
-                            validation_data=val_gen.generate(),
-                            validation_steps=val_gen.steps_per_epoch,
-                            callbacks=[tensorboard_callback, ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True)],
-                            #      ModelCheckpoint('model.h5', save_best_only=True)],
-                            epochs=epochs,
-                            )
+        callbacks = [ModelCheckpoint('model.h5', save_best_only=True, save_weights_only=True)]
 
+    model.fit_generator(generator=train_gen.generate(),
+                        steps_per_epoch=train_gen.steps_per_epoch,
+                        validation_data=val_gen.generate(),
+                        validation_steps=val_gen.steps_per_epoch,
+                        callbacks=callbacks,
+                        #      ModelCheckpoint('model.h5', save_best_only=True)],
+                        epochs=epochs
+                        )
 
 
     os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/{0}.h5".format(run_name))
@@ -612,7 +695,7 @@ if __name__ == "__main__":
         local_run = False
         copy_data_from_gs(images_dir=images_dir, index_path=index_path, pir_prefix=pir_prefix)
 
-    all_me_model(images_dir="tmp", index_path="tmp/indexes.txt", images_per_batch=imgs_per_batch, test_ratio=test_ratio, local_run=local_run)
+    hyperparam_optimization(images_dir="tmp", index_path="tmp/indexes.txt", images_per_batch=imgs_per_batch, test_ratio=test_ratio, local_run=local_run)
 
 
 

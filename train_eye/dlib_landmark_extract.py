@@ -28,7 +28,11 @@ imgs = os.listdir("images")
 for outer_index, img_path in enumerate(imgs):
     if outer_index % 100 == 0:
         print("At index : {0}".format(outer_index))
+    if os.path.exists(os.path.join('output_landmarks', img_path)):
+        print("Skipping image {0} because it already exists".format(img_path))
+        continue
     try:
+
         image = cv2.imread(os.path.join("images/",img_path))
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -42,7 +46,7 @@ for outer_index, img_path in enumerate(imgs):
 
             cp = image[rect.top():rect.bottom(),rect.left():rect.right()]
             cp = imutils.resize(cp, width=250, inter=cv2.INTER_CUBIC)
-            cv2.imshow("rect", cp)
+            # cv2.imshow("rect", cp)
 
             shape = predictor(gray, rect)
             shape = face_utils.shape_to_np(shape)
