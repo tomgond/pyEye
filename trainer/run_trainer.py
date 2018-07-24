@@ -1,7 +1,7 @@
 import os
 from random import randint
 
-run_name = "there_are_hopes_for_this_one"
+run_name = "shit_too_much_tries"
 
 
 if __name__ == "__main__":

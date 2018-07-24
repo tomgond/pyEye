@@ -83,33 +83,36 @@ class DataGenerator(object):
         data_dict = {}
         self.total_images_with_aug = 0
         for itm in t_list:
-            if os.path.exists(os.path.join(images_folder_path,itm[0])) and itm[0] in subset:
-                x_val = int(itm[1].strip())
-                y_val = int(itm[2].strip())
-                face_path = os.path.join(self.images_folder_path, itm[0], "face.jpg")
-                left_eye_path = os.path.join(self.images_folder_path, itm[0], "left_eye.jpg")
-                right_eye_path = os.path.join(self.images_folder_path, itm[0], "right_eye.jpg")
+            try:
+                if os.path.exists(os.path.join(images_folder_path,itm[0])) and itm[0] in subset:
+                    x_val = int(itm[1].strip())
+                    y_val = int(itm[2].strip())
+                    face_path = os.path.join(self.images_folder_path, itm[0], "face.jpg")
+                    left_eye_path = os.path.join(self.images_folder_path, itm[0], "left_eye.jpg")
+                    right_eye_path = os.path.join(self.images_folder_path, itm[0], "right_eye.jpg")
 
-                if N_CHANNELS==1:
-                    img_face = cv2.resize(cv2.cvtColor(cv2.imread(face_path), cv2.COLOR_BGR2GRAY),
-                                          (FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y))
-                    img_left_eye = cv2.resize(cv2.cvtColor(cv2.imread(left_eye_path), cv2.COLOR_BGR2GRAY),
-                                              (EYE_IMAGE_SIZE_Y,EYE_IMAGE_SIZE_X))
-                    img_right_eye = cv2.resize(cv2.cvtColor(cv2.imread(right_eye_path), cv2.COLOR_BGR2GRAY),
-                                               (EYE_IMAGE_SIZE_Y,EYE_IMAGE_SIZE_X))
-                else:
-                    img_face = cv2.resize(cv2.imread(face_path), (FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y))
-                    #
-                    img_left_eye = cv2.resize(cv2.imread(left_eye_path), (EYE_IMAGE_SIZE_Y, EYE_IMAGE_SIZE_X))
-                    #
-                    img_right_eye = cv2.resize(cv2.imread(right_eye_path), (EYE_IMAGE_SIZE_Y, EYE_IMAGE_SIZE_X))
+                    if N_CHANNELS==1:
+                        img_face = cv2.resize(cv2.cvtColor(cv2.imread(face_path), cv2.COLOR_BGR2GRAY),
+                                              (FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y))
+                        img_left_eye = cv2.resize(cv2.cvtColor(cv2.imread(left_eye_path), cv2.COLOR_BGR2GRAY),
+                                                  (EYE_IMAGE_SIZE_Y,EYE_IMAGE_SIZE_X))
+                        img_right_eye = cv2.resize(cv2.cvtColor(cv2.imread(right_eye_path), cv2.COLOR_BGR2GRAY),
+                                                   (EYE_IMAGE_SIZE_Y,EYE_IMAGE_SIZE_X))
+                    else:
+                        img_face = cv2.resize(cv2.imread(face_path), (FACE_IMAGE_SIZE_X, FACE_IMAGE_SIZE_Y))
+                        #
+                        img_left_eye = cv2.resize(cv2.imread(left_eye_path), (EYE_IMAGE_SIZE_Y, EYE_IMAGE_SIZE_X))
+                        #
+                        img_right_eye = cv2.resize(cv2.imread(right_eye_path), (EYE_IMAGE_SIZE_Y, EYE_IMAGE_SIZE_X))
 
 
 
-                # resample = number_of_samples_from_image_coors(x_val, y_val)
-                resample = 4
-                data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample" : resample, "face_vector":my_img_to_array(img_face) , "left_eye_vector" : my_img_to_array(img_left_eye), "right_eye_vector" : my_img_to_array(img_right_eye)}
-                self.total_images_with_aug += resample
+                    # resample = number_of_samples_from_image_coors(x_val, y_val)
+                    resample = 3
+                    data_dict[itm[0]] = {"lbl":np.array([x_val, y_val]), "resample" : resample, "face_vector":my_img_to_array(img_face) , "left_eye_vector" : my_img_to_array(img_left_eye), "right_eye_vector" : my_img_to_array(img_right_eye)}
+                    self.total_images_with_aug += resample
+            except Exception as e:
+                print("failed doing for : {0}".format(e))
         print("Generator created with {0} images, {1} images with augmentation".format(len(data_dict.keys()), self.total_images_with_aug))
         self.steps_per_epoch = self.total_images_with_aug // self.images_per_batch
         self.data = data_dict
@@ -265,6 +268,7 @@ def print_memory_statistics():
 
 def euc_dist_keras(y_true, y_pred):
     return K.sqrt(K.sum(K.square(y_true - y_pred), axis=-1, keepdims=True))
+    # return K.sum(K.square(y_true - y_pred), axis=-1, keepdims=True)
 
 
 def copy_data_from_gs(images_dir="gs://pyeye_bucket/data/images_VGG16/", pir_prefix="132*", index_path="gs://pyeye_bucket/data/indexes.txt" , to_save_dir='tmp/'):
@@ -275,7 +279,7 @@ def copy_data_from_gs(images_dir="gs://pyeye_bucket/data/images_VGG16/", pir_pre
     os.system("gsutil cp {0} tmp/indexes.txt".format(index_path))
     print("[ ] Getting haar cascades")
     os.mkdir("haar")
-    os.system("gsutil cp gs://pyeye_bucket/haar_cascades/* haar/")
+    os.system("gsutil -m cp gs://pyeye_bucket/haar_cascades/* haar/")
 
 
 
@@ -558,6 +562,7 @@ def train_one_model(params, tensorboard_directory, tensorboard_name, train_gen, 
     print("Run : {0}, score: {1}".format(tensorboard_name, fn))
     return fn
 
+
 def hyperparam_optimization(images_dir="tmp", index_path="indexes.txt", resample_k=3, images_per_batch=10, test_ratio=0.777, local_run=False):
     train_set, val_set = random_train_val_split(index_path, images_dir, test_ratio=test_ratio)
     train_gen = DataGenerator(index_path, images_dir, predict_model=None, subset=train_set,
@@ -582,7 +587,7 @@ def hyperparam_optimization(images_dir="tmp", index_path="indexes.txt", resample
     params['lr'] = 0.5
 
     # Start one model training
-    train_one_model(params, "run", run_name, train_gen, val_gen, 40)
+    train_one_model(params, "run", run_name, train_gen, val_gen, 20)
     os.system("gsutil -m cp model.h5 gs://pyeye_bucket/models/{0}.h5".format(run_name))
     exit()
     # End one model training
@@ -682,7 +687,7 @@ def all_me_model(images_dir="tmp", index_path="indexes.txt", resample_k=3, image
 
 if __name__ == "__main__":
     images_dir = "gs://pyeye_bucket/data/output_landmarks/"
-    index_path = "gs://pyeye_bucket/data/output_landmarks/indexes_landmarks.txt"
+    index_path = "gs://pyeye_bucket/data/output_landmarks/filtered.csv"
     pir_prefix = "*"
 
     if platform.node() == 'xkcd':
