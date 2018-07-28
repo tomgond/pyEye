@@ -48,6 +48,12 @@ def get_pca():
 def get_scaler():
     return joblib.load("models/scalar.pkl")
 
+def get_label_encoder():
+    return joblib.load("models/label_encoder.pkl")
+
+def get_random_forest_classifier():
+    return joblib.load("models/clf_randomforestclassifier.pkl")
+
 def extract_features(infile, outdir):
     FNULL = open(os.devnull, 'w')
     subprocess.call([open_face_bin, "-f", infile, "-out_dir",
@@ -55,9 +61,12 @@ def extract_features(infile, outdir):
 
 
 pca = get_pca()
+clf = get_random_forest_classifier()
+label_encoder = get_label_encoder()
 clf_x = get_random_forest_classifier_x()
 clf_y = get_random_forest_classifier_y()
 scaler = get_scaler()
+
 while True:
     try:
         input("say_smth")
@@ -66,15 +75,16 @@ while True:
         ret, img = webcam.read()
         ret, img = webcam.read()
         cv2.imwrite("tmp_image.jpg", img)
-        extract_features("tmp_image.jpg", r"D:\Programming\pyEye\openface_interaction")
+        extract_features("t"
+                         ""
+                         "mp_image.jpg", r"D:\Programming\pyEye\openface_interaction")
         X, _, _ = get_dataset("tmp_image.csv")
         X = scaler.transform(X)
         X = pca.transform(X)
-        print(X)
-        y_x = clf_x.predict(X)
-        y_y = clf_x.predict(X)
-
-        click(int(y_x[0]), int(y_y[0]))
+        lbl = clf.predict(X)
+        coors = label_encoder.inverse_transform(lbl)
+        print(coors)
+        click(int(coors[0][0]+480), int(coors[0][1]+270))
 
 
     except Exception as e:
